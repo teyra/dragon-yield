@@ -1,77 +1,188 @@
 "use client";
-import { useState } from "react";
-import { NextPage } from "next";
+import { useState, useEffect } from "react";
+import {
+  useAccount,
+  useBalance,
+  useWriteContract,
+  useReadContract,
+} from "wagmi";
+import { parseUnits, formatUnits } from "viem";
+import { readContract, writeContract } from "@wagmi/core";
+import { config } from "@/wagmiConfig";
 
-const StakingPage: NextPage = () => {
-  const [stakedAmount, setStakedAmount] = useState(0); // 用户质押的金额
-  const [inputAmount, setInputAmount] = useState(""); // 用户输入的金额
-  const [rewards, setRewards] = useState(0); // 用户的奖励
+const stakingContractAddress = "0xYourStakingContractAddress"; // 替换为实际的质押合约地址
+const stakingContractABI = [
+  "function stake(uint256 amount) external",
+  "function withdraw(uint256 amount) external",
+  "function getReward() external",
+  "function earned(address account) external view returns (uint256)",
+  "function balanceOf(address account) external view returns (uint256)",
+  "function totalSupply() external view returns (uint256)",
+];
 
-  const handleStake = () => {
-    const amount = parseFloat(inputAmount);
-    if (isNaN(amount) || amount <= 0) {
-      alert("请输入有效的金额");
-      return;
+const StakingPanel = () => {
+  const { address } = useAccount(); // 获取用户钱包地址
+  const [stakeAmount, setStakeAmount] = useState(""); // 用户输入的质押金额
+  const [reward, setReward] = useState("0"); // 用户的奖励余额
+  const [stakedBalance, setStakedBalance] = useState("0"); // 用户的质押余额
+  const [totalSupply, setTotalSupply] = useState("0"); // 质押池的总锁仓量
+  const [isPending, setIsPending] = useState(false); // 交易状态
+
+  // 获取用户余额
+  const { data: balanceData } = useBalance({
+    address,
+    token: "0xYourTokenAddress", // 替换为质押代币地址
+  });
+
+  // 获取用户的质押余额和奖励
+  const fetchStakingData = async () => {
+    try {
+      const staked = await readContract(config, {
+        address: stakingContractAddress,
+        abi: stakingContractABI,
+        functionName: "balanceOf",
+        args: [address],
+      });
+      const earned = await readContract(config, {
+        address: stakingContractAddress,
+        abi: stakingContractABI,
+        functionName: "earned",
+        args: [address],
+      });
+      const total = await readContract(config, {
+        address: stakingContractAddress,
+        abi: stakingContractABI,
+        functionName: "totalSupply",
+      });
+
+      setStakedBalance(formatUnits(staked, 18));
+      setReward(formatUnits(earned, 18));
+      setTotalSupply(formatUnits(total, 18));
+    } catch (error) {
+      console.error("Error fetching staking data:", error);
     }
-    setStakedAmount(stakedAmount + amount);
-    setInputAmount("");
   };
 
-  const handleUnstake = () => {
-    const amount = parseFloat(inputAmount);
-    if (isNaN(amount) || amount <= 0 || amount > stakedAmount) {
-      alert("请输入有效的金额，且不能超过质押金额");
+  useEffect(() => {
+    if (address) {
+      fetchStakingData();
+    }
+  }, [address]);
+
+  // 质押代币
+  const handleStake = async () => {
+    if (!stakeAmount) {
+      alert("请输入质押金额");
       return;
     }
-    setStakedAmount(stakedAmount - amount);
-    setInputAmount("");
+    setIsPending(true);
+    try {
+      await writeContract(config, {
+        address: stakingContractAddress,
+        abi: stakingContractABI,
+        functionName: "stake",
+        args: [parseUnits(stakeAmount, 18)],
+      });
+      alert("质押成功！");
+      fetchStakingData();
+    } catch (error) {
+      console.error("Error staking:", error);
+      alert("质押失败，请检查输入！");
+    } finally {
+      setIsPending(false);
+    }
   };
 
-  const calculateRewards = () => {
-    // 简单的奖励计算逻辑，例如每质押 1 单位获得 0.1 奖励
-    setRewards(stakedAmount * 0.1);
+  // 解押代币
+  const handleWithdraw = async () => {
+    if (!stakeAmount) {
+      alert("请输入解押金额");
+      return;
+    }
+    setIsPending(true);
+    try {
+      await writeContract(config, {
+        address: stakingContractAddress,
+        abi: stakingContractABI,
+        functionName: "withdraw",
+        args: [parseUnits(stakeAmount, 18)],
+      });
+      alert("解押成功！");
+      fetchStakingData();
+    } catch (error) {
+      console.error("Error withdrawing:", error);
+      alert("解押失败，请检查输入！");
+    } finally {
+      setIsPending(false);
+    }
+  };
+
+  // 领取奖励
+  const handleClaimReward = async () => {
+    setIsPending(true);
+    try {
+      await writeContract(config, {
+        address: stakingContractAddress,
+        abi: stakingContractABI,
+        functionName: "getReward",
+      });
+      alert("奖励领取成功！");
+      fetchStakingData();
+    } catch (error) {
+      console.error("Error claiming reward:", error);
+      alert("奖励领取失败！");
+    } finally {
+      setIsPending(false);
+    }
   };
 
   return (
-    <div className="bg-gray-100 p-4 rounded-lg">
-      <h2 className="text-xl font-bold mb-4">质押池</h2>
+    <div className="p-6 bg-gray-800 text-white rounded-lg shadow-lg max-w-md mx-auto">
+      <h2 className="text-2xl font-bold mb-4 text-center">质押面板</h2>
+      <p className="mb-2">总锁仓量: {totalSupply} 代币</p>
+      <p className="mb-2">我的质押: {stakedBalance} 代币</p>
+      <p className="mb-4">我的奖励: {reward} 代币</p>
       <div className="mb-4">
-        <label className="block mb-2">输入金额:</label>
+        <label className="block mb-2">质押/解押金额:</label>
         <input
           type="number"
-          value={inputAmount}
-          onChange={(e) => setInputAmount(e.target.value)}
+          value={stakeAmount}
+          onChange={(e) => setStakeAmount(e.target.value)}
           className="p-2 rounded bg-gray-700 text-white w-full"
+          placeholder="输入金额"
         />
       </div>
-      <div className="flex gap-4 mb-4">
+      <div className="flex justify-between">
         <button
           onClick={handleStake}
-          className="bg-green-500 text-white px-4 py-2 rounded"
+          disabled={isPending}
+          className={`${
+            isPending ? "bg-gray-500" : "bg-blue-500 hover:bg-blue-600"
+          } text-white px-4 py-2 rounded`}
         >
-          质押
+          {isPending ? "处理中..." : "质押"}
         </button>
         <button
-          onClick={handleUnstake}
-          className="bg-red-500 text-white px-4 py-2 rounded"
+          onClick={handleWithdraw}
+          disabled={isPending}
+          className={`${
+            isPending ? "bg-gray-500" : "bg-red-500 hover:bg-red-600"
+          } text-white px-4 py-2 rounded`}
         >
-          解押
+          {isPending ? "处理中..." : "解押"}
         </button>
       </div>
-      <div className="mb-4">
-        <button
-          onClick={calculateRewards}
-          className="bg-blue-500 text-white px-4 py-2 rounded"
-        >
-          计算奖励
-        </button>
-      </div>
-      <div className="text-base text-gray-700">
-        <p>已质押金额: {stakedAmount}</p>
-        <p>奖励: {rewards}</p>
-      </div>
+      <button
+        onClick={handleClaimReward}
+        disabled={isPending}
+        className={`mt-4 ${
+          isPending ? "bg-gray-500" : "bg-green-500 hover:bg-green-600"
+        } text-white px-4 py-2 rounded w-full`}
+      >
+        {isPending ? "处理中..." : "领取奖励"}
+      </button>
     </div>
   );
 };
 
-export default StakingPage;
+export default StakingPanel;

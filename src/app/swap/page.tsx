@@ -83,6 +83,7 @@ const TokenSwapPanelPage = () => {
     address,
     token: inputToken === "ETH" ? undefined : predefinedTokens[inputToken],
   });
+
   const res = useReadContract({
     address: "0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43",
     abi: aggregatorV3InterfaceABI,
@@ -92,10 +93,7 @@ const TokenSwapPanelPage = () => {
   // 模拟换算逻辑（实际应通过 Uniswap 或预言机获取实时价格）
   useEffect(() => {
     if (amount) {
-      const rate = inputToken === "ETH" && outputToken === "USDC" ? 1800 : 1; // 假设 1 ETH = 1800 USDC
-      // 0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43
-      getPrice();
-      setConvertedAmount((parseFloat(amount) * rate).toFixed(2));
+      getPriceWithDecimals();
     } else {
       setConvertedAmount("");
     }
@@ -111,14 +109,57 @@ const TokenSwapPanelPage = () => {
     sendTransaction();
   };
 
-  const getPrice = async () => {
-    const res = await readContract(config, {
-      address: "0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43",
-      abi: aggregatorV3InterfaceABI,
-      functionName: "latestRoundData",
-    });
-    console.log("🚀 ~ getPrice ~ res:", res);
-  };
+  async function getPriceWithDecimals() {
+    try {
+      const res: any = await readContract(config, {
+        address: "0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43",
+        abi: aggregatorV3InterfaceABI,
+        functionName: "latestRoundData",
+      });
+
+      // 首先获取小数位数
+      const decimals = await readContract(config, {
+        address: "0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43",
+        abi: aggregatorV3InterfaceABI,
+        functionName: "decimals",
+      });
+
+      const [roundId, answer, startedAt, updatedAt, answeredInRound] = res;
+
+      // 更安全的类型转换
+      const price = Number(answer) / Math.pow(10, Number(decimals));
+      const lastUpdated = new Date(Number(updatedAt) * 1000);
+
+      // 验证数据有效性
+      if (Number(answer) <= 0) {
+        throw new Error("Invalid price value received");
+      }
+
+      if (Number(updatedAt) * 1000 > Date.now() + 60000) {
+        console.warn("Price timestamp is in the future, possible data issue");
+      }
+
+      console.log("Price Data:", {
+        price,
+        roundId: roundId.toString(),
+        lastUpdated,
+        decimals: Number(decimals),
+      });
+      const rate = inputToken === "ETH" && outputToken === "USDC" ? price : 1; // 假设 1 ETH = 1800 USDC
+
+      setConvertedAmount((parseFloat(amount) * rate).toFixed(2));
+      // return {
+      //   price,
+      //   lastUpdated,
+      //   roundId,
+      //   decimals: Number(decimals),
+      // };
+    } catch (error) {
+      console.error("Error fetching price data:", error);
+      // 可以在这里添加回退逻辑，比如从缓存或API获取
+      throw error;
+    }
+  }
 
   const sendTransaction = async () => {
     try {
@@ -147,7 +188,7 @@ const TokenSwapPanelPage = () => {
   };
 
   return (
-    <div className="p-6 bg-gray-800 text-white rounded-lg shadow-lg max-w-md mx-auto">
+    <div className="p-6 mt-30 bg-gray-800 text-white rounded-lg shadow-lg max-w-md mx-auto">
       <h2 className="text-2xl font-bold mb-4 text-center">代币兑换</h2>
       <div className="mb-4">
         <label className="block mb-2">输入代币:</label>
@@ -194,7 +235,6 @@ const TokenSwapPanelPage = () => {
         {convertedAmount && (
           <p className="text-sm text-gray-400 mt-2">
             预计获得: {convertedAmount} {outputToken}
-            hash{hash}
           </p>
         )}
       </div>
