@@ -1,11 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import {
-  useAccount,
-  useBalance,
-  useWriteContract,
-  useReadContract,
-} from "wagmi";
+import { useAccount } from "wagmi";
 import { parseUnits, formatUnits } from "viem";
 import { readContract, writeContract } from "@wagmi/core";
 import { config } from "@/wagmiConfig";
@@ -28,42 +23,35 @@ const StakingPanel = () => {
   const [totalSupply, setTotalSupply] = useState("0"); // 质押池的总锁仓量
   const [isPending, setIsPending] = useState(false); // 交易状态
 
-  // 获取用户余额
-  const { data: balanceData } = useBalance({
-    address,
-    token: "0xYourTokenAddress", // 替换为质押代币地址
-  });
-
-  // 获取用户的质押余额和奖励
-  const fetchStakingData = async () => {
-    try {
-      const staked = await readContract(config, {
-        address: stakingContractAddress,
-        abi: stakingContractABI,
-        functionName: "balanceOf",
-        args: [address],
-      });
-      const earned = await readContract(config, {
-        address: stakingContractAddress,
-        abi: stakingContractABI,
-        functionName: "earned",
-        args: [address],
-      });
-      const total = await readContract(config, {
-        address: stakingContractAddress,
-        abi: stakingContractABI,
-        functionName: "totalSupply",
-      });
-
-      setStakedBalance(formatUnits(staked, 18));
-      setReward(formatUnits(earned, 18));
-      setTotalSupply(formatUnits(total, 18));
-    } catch (error) {
-      console.error("Error fetching staking data:", error);
-    }
-  };
-
   useEffect(() => {
+    // 获取用户的质押余额和奖励
+    const fetchStakingData = async () => {
+      try {
+        const staked = await readContract(config, {
+          address: stakingContractAddress,
+          abi: stakingContractABI,
+          functionName: "balanceOf",
+          args: [address],
+        });
+        const earned = await readContract(config, {
+          address: stakingContractAddress,
+          abi: stakingContractABI,
+          functionName: "earned",
+          args: [address],
+        });
+        const total = await readContract(config, {
+          address: stakingContractAddress,
+          abi: stakingContractABI,
+          functionName: "totalSupply",
+        });
+
+        setStakedBalance(formatUnits(staked as bigint, 18));
+        setReward(formatUnits(earned as bigint, 18));
+        setTotalSupply(formatUnits(total as bigint, 18));
+      } catch (error) {
+        console.error("Error fetching staking data:", error);
+      }
+    };
     if (address) {
       fetchStakingData();
     }
@@ -84,7 +72,6 @@ const StakingPanel = () => {
         args: [parseUnits(stakeAmount, 18)],
       });
       alert("质押成功！");
-      fetchStakingData();
     } catch (error) {
       console.error("Error staking:", error);
       alert("质押失败，请检查输入！");
@@ -108,7 +95,6 @@ const StakingPanel = () => {
         args: [parseUnits(stakeAmount, 18)],
       });
       alert("解押成功！");
-      fetchStakingData();
     } catch (error) {
       console.error("Error withdrawing:", error);
       alert("解押失败，请检查输入！");
@@ -127,7 +113,6 @@ const StakingPanel = () => {
         functionName: "getReward",
       });
       alert("奖励领取成功！");
-      fetchStakingData();
     } catch (error) {
       console.error("Error claiming reward:", error);
       alert("奖励领取失败！");

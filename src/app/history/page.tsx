@@ -4,68 +4,87 @@ import { useEffect, useState } from "react";
 import { createClient, gql, cacheExchange, fetchExchange } from "urql";
 
 const TransactionHistoryPage = () => {
-  const apiKey = process.env.NEXT_PUBLIC_GRAPH_API_KEY;
-  const client = createClient({
-    url: "https://gateway.thegraph.com/api/subgraphs/id/5zvR82QoaXYFyDEKLZ9t6v9adgnptxYpKpSbxtgVENFV",
-    fetchOptions: {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-      },
-    },
-    exchanges: [cacheExchange, fetchExchange],
-  });
-
-  // 扩展 GraphQL 查询以获取更多字段
-  const DATA_QUERY = gql`
-    query GetPools($first: Int!, $skip: Int!) {
-      pools(first: $first, skip: $skip, orderBy: volumeUSD, orderDirection: desc) {
-        id
-        token0 {
-          symbol
-          name
-        }
-        token1 {
-          symbol
-          name
-        }
-        volumeUSD
-        totalValueLockedUSD
-        feeTier
-        createdAtTimestamp
-      }
-    }
-  `;
-
-  const [pools, setPools] = useState<any[]>([]);
+  type Pool = {
+    id: string;
+    token0: {
+      symbol: string;
+      name: string;
+    };
+    token1: {
+      symbol: string;
+      name: string;
+    };
+    volumeUSD: string;
+    totalValueLockedUSD: string;
+    feeTier: number;
+    createdAtTimestamp: number;
+  };
+  const [pools, setPools] = useState<Pool[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0); // 当前页
   const itemsPerPage = 10; // 每页显示的项目数
 
-  // 查询交易对数据
-  const fetchPools = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await client
-        .query(DATA_QUERY, { first: itemsPerPage, skip: page * itemsPerPage })
-        .toPromise();
-      const data = response.data;
-      console.log("🚀 ~ fetchPools ~ data:", data);
-      if (data && data.pools) {
-        setPools(data.pools);
-      } else {
-        setError("未找到数据");
-      }
-    } catch (err) {
-      setError("查询数据时出错");
-      console.error("Error fetching pools:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
+    // 查询交易对数据
+    const apiKey = process.env.NEXT_PUBLIC_GRAPH_API_KEY;
+    const client = createClient({
+      url: "https://gateway.thegraph.com/api/subgraphs/id/5zvR82QoaXYFyDEKLZ9t6v9adgnptxYpKpSbxtgVENFV",
+      fetchOptions: {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+        },
+      },
+      exchanges: [cacheExchange, fetchExchange],
+    });
+
+    // 扩展 GraphQL 查询以获取更多字段
+    const DATA_QUERY = gql`
+      query GetPools($first: Int!, $skip: Int!) {
+        pools(
+          first: $first
+          skip: $skip
+          orderBy: volumeUSD
+          orderDirection: desc
+        ) {
+          id
+          token0 {
+            symbol
+            name
+          }
+          token1 {
+            symbol
+            name
+          }
+          volumeUSD
+          totalValueLockedUSD
+          feeTier
+          createdAtTimestamp
+        }
+      }
+    `;
+    const fetchPools = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await client
+          .query(DATA_QUERY, { first: itemsPerPage, skip: page * itemsPerPage })
+          .toPromise();
+        const data = response.data;
+        console.log("🚀 ~ fetchPools ~ data:", data);
+        if (data && data.pools) {
+          setPools(data.pools);
+        } else {
+          setError("未找到数据");
+        }
+      } catch (err) {
+        setError("查询数据时出错");
+        console.error("Error fetching pools:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
     fetchPools();
   }, [page]); // 当页码变化时重新加载数据
 
@@ -110,8 +129,12 @@ const TransactionHistoryPage = () => {
               <td className="border border-gray-600 px-4 py-2">
                 {pool.token0.symbol} / {pool.token1.symbol}
               </td>
-              <td className="border border-gray-600 px-4 py-2">{pool.token0.name}</td>
-              <td className="border border-gray-600 px-4 py-2">{pool.token1.name}</td>
+              <td className="border border-gray-600 px-4 py-2">
+                {pool.token0.name}
+              </td>
+              <td className="border border-gray-600 px-4 py-2">
+                {pool.token1.name}
+              </td>
               <td className="border border-gray-600 px-4 py-2">
                 {pool.feeTier / 10000}%
               </td>
