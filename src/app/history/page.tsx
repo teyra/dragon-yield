@@ -28,6 +28,7 @@ const TransactionHistoryPage = () => {
   useEffect(() => {
     // 查询交易对数据
     const apiKey = process.env.NEXT_PUBLIC_GRAPH_API_KEY;
+    console.log("🚀 ~ useEffect ~ apiKey:", apiKey);
     const client = createClient({
       url: "https://gateway.thegraph.com/api/subgraphs/id/5zvR82QoaXYFyDEKLZ9t6v9adgnptxYpKpSbxtgVENFV",
       fetchOptions: {
